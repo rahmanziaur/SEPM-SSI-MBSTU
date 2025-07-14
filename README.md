@@ -1,2 +1,2 @@
-Spring Boot Projects:
-<iframe width="912" height="513" src="https://www.youtube.com/embed/HYGnVeCs0Yg" title="Student Management System Spring Boot Project | Spring Boot Thymeleaf Web Application Full Course ✅" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+Spring Boot Projects: https://youtu.be/HYGnVeCs0Yg
+https://github.com/RameshMF/student-management-system-springboot
