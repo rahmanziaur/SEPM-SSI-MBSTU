@@ -415,7 +415,434 @@ System.out.println(task3.nonStaticCount);
 
 will give three potentially different values.
 
-**Previous Year Recommended Topic:**
+Absolutely. This is the key concept behind why your `staticCount++` experiment can produce surprising results.
+
+## 1. What is a race condition?
+
+A **race condition** occurs when multiple threads access and modify the **same shared data at the same time**, and the final result depends on the timing/order of the threads.
+
+In your example:
+
+```java
+static int staticCount = 0;
+```
+
+There is only **one `staticCount` shared by all three threads**.
+
+Each thread executes:
+
+```java
+staticCount++;
+```
+
+The problem is that:
+
+```java
+staticCount++;
+```
+
+looks like one operation, but internally it is approximately:
+
+```text
+1. READ  staticCount
+2. ADD   1
+3. WRITE staticCount
+```
+
+It is therefore **not atomic**.
+
+---
+
+## 2. How can the problem happen?
+
+Suppose:
+
+```text
+staticCount = 10
+```
+
+Two threads execute `staticCount++` at nearly the same time.
+
+### Thread 1
+
+```text
+READ → 10
+```
+
+### Thread 2
+
+```text
+READ → 10
+```
+
+Both threads have now read `10`.
+
+Then:
+
+```text
+Thread 1: 10 + 1 = 11
+Thread 2: 10 + 1 = 11
+```
+
+And both write:
+
+```text
+Thread 1 → WRITE 11
+Thread 2 → WRITE 11
+```
+
+You expected:
+
+```text
+10 → 11 → 12
+```
+
+But you got:
+
+```text
+10 → 11
+```
+
+One increment was effectively **lost**.
+
+This is called a **lost update**.
+
+---
+
+# 3. Let's do the experiment
+
+Instead of running for 10 seconds, let's make the experiment easier to measure.
+
+We'll create three threads, and each thread will increment the counter **1,000,000 times**.
+
+### Experiment 1 — No synchronization
+
+```java
+public class ThreadMain {
+
+    public static void main(String[] args) throws InterruptedException {
+
+        CookingTask task1 = new CookingTask("Cooking");
+        CookingTask task2 = new CookingTask("Washing");
+        CookingTask task3 = new CookingTask("Cleaning");
+
+        task1.start();
+        task2.start();
+        task3.start();
+
+        // Wait for all threads to finish
+        task1.join();
+        task2.join();
+        task3.join();
+
+        System.out.println("Expected Count = " + (3 * 1_000_000));
+        System.out.println("Actual Count   = " + CookingTask.staticCount);
+    }
+}
+
+
+class CookingTask extends Thread {
+
+    static int staticCount = 0;
+
+    private String taskName;
+
+    public CookingTask(String taskName) {
+        this.taskName = taskName;
+    }
+
+    @Override
+    public void run() {
+
+        for (int i = 0; i < 1_000_000; i++) {
+            staticCount++;
+        }
+
+        System.out.println(taskName + " finished.");
+    }
+}
+```
+
+You might expect:
+
+```text
+Expected Count = 3000000
+Actual Count   = 3000000
+```
+
+But you may get something like:
+
+```text
+Expected Count = 3000000
+Actual Count   = 1847291
+```
+
+or:
+
+```text
+Expected Count = 3000000
+Actual Count   = 2478392
+```
+
+The exact result can vary.
+
+That's the **race condition**.
+
+---
+
+# 4. Solution 1 — `synchronized`
+
+We can protect the increment using `synchronized`.
+
+Change:
+
+```java
+staticCount++;
+```
+
+to:
+
+```java
+incrementCount();
+```
+
+and create:
+
+```java
+static synchronized void incrementCount() {
+    staticCount++;
+}
+```
+
+Complete version:
+
+```java
+public class ThreadMain {
+
+    public static void main(String[] args) throws InterruptedException {
+
+        CookingTask task1 = new CookingTask("Cooking");
+        CookingTask task2 = new CookingTask("Washing");
+        CookingTask task3 = new CookingTask("Cleaning");
+
+        task1.start();
+        task2.start();
+        task3.start();
+
+        task1.join();
+        task2.join();
+        task3.join();
+
+        System.out.println("Expected Count = " + (3 * 1_000_000));
+        System.out.println("Actual Count   = " + CookingTask.staticCount);
+    }
+}
+
+
+class CookingTask extends Thread {
+
+    static int staticCount = 0;
+
+    private String taskName;
+
+    public CookingTask(String taskName) {
+        this.taskName = taskName;
+    }
+
+    @Override
+    public void run() {
+
+        for (int i = 0; i < 1_000_000; i++) {
+            incrementCount();
+        }
+
+        System.out.println(taskName + " finished.");
+    }
+
+    static synchronized void incrementCount() {
+        staticCount++;
+    }
+}
+```
+
+Now:
+
+```text
+Expected Count = 3000000
+Actual Count   = 3000000
+```
+
+### Why?
+
+`synchronized` makes sure that **only one thread at a time** can execute the synchronized method.
+
+Conceptually:
+
+```text
+Thread 1 → 🔒 increment → 🔓
+Thread 2 → waits
+Thread 2 → 🔒 increment → 🔓
+Thread 3 → waits
+Thread 3 → 🔒 increment → 🔓
+```
+
+So the read → add → write sequence is protected.
+
+---
+
+# 5. Solution 2 — `AtomicInteger`
+
+Java provides a special class for this kind of situation:
+
+```java
+AtomicInteger
+```
+
+Import it:
+
+```java
+import java.util.concurrent.atomic.AtomicInteger;
+```
+
+Then:
+
+```java
+static AtomicInteger staticCount = new AtomicInteger(0);
+```
+
+Instead of:
+
+```java
+staticCount++;
+```
+
+use:
+
+```java
+staticCount.incrementAndGet();
+```
+
+Complete example:
+
+```java
+import java.util.concurrent.atomic.AtomicInteger;
+
+public class ThreadMain {
+
+    public static void main(String[] args) throws InterruptedException {
+
+        CookingTask task1 = new CookingTask("Cooking");
+        CookingTask task2 = new CookingTask("Washing");
+        CookingTask task3 = new CookingTask("Cleaning");
+
+        task1.start();
+        task2.start();
+        task3.start();
+
+        task1.join();
+        task2.join();
+        task3.join();
+
+        System.out.println("Expected Count = " + (3 * 1_000_000));
+        System.out.println("Actual Count   = " + CookingTask.staticCount.get());
+    }
+}
+
+
+class CookingTask extends Thread {
+
+    static AtomicInteger staticCount = new AtomicInteger(0);
+
+    private String taskName;
+
+    public CookingTask(String taskName) {
+        this.taskName = taskName;
+    }
+
+    @Override
+    public void run() {
+
+        for (int i = 0; i < 1_000_000; i++) {
+            staticCount.incrementAndGet();
+        }
+
+        System.out.println(taskName + " finished.");
+    }
+}
+```
+
+Now again:
+
+```text
+Expected Count = 3000000
+Actual Count   = 3000000
+```
+
+---
+
+## 6. `synchronized` vs `AtomicInteger`
+
+|                               | `staticCount++` | `synchronized`            | `AtomicInteger`     |
+| ----------------------------- | --------------- | ------------------------- | ------------------- |
+| Thread-safe?                  | ❌ No            | ✅ Yes                     | ✅ Yes               |
+| Race condition?               | Possible        | Prevented                 | Prevented           |
+| Lock required?                | No              | Yes                       | No explicit lock    |
+| Suitable for simple counters? | ❌               | ✅                         | ✅                   |
+| Operation                     | `++`            | synchronized method/block | `incrementAndGet()` |
+
+A useful way to remember it:
+
+```text
+static
+  ↓
+ONE shared variable
+
+multiple threads
+  ↓
+simultaneous access
+
+staticCount++
+  ↓
+READ → MODIFY → WRITE
+
+READ/MODIFY/WRITE can overlap
+  ↓
+RACE CONDITION
+```
+
+Whereas:
+
+```text
+AtomicInteger
+      ↓
+incrementAndGet()
+      ↓
+atomic increment
+      ↓
+safe concurrent counter
+```
+
+### One subtle point
+
+The `join()` calls in the examples are **not** what makes the counter thread-safe.
+
+```java
+task1.join();
+task2.join();
+task3.join();
+```
+
+They simply make `main()` **wait until the worker threads finish** before printing the result.
+
+So there are actually **two separate concurrency concepts** in this experiment:
+
+1. **`synchronized` / `AtomicInteger`** → protects the shared counter.
+2. **`join()`** → makes the main thread wait for the worker threads.
+
+That distinction is very important when learning Java concurrency.
+
+
+**Previous Year Recommended Topics:**
 
 Servlet Learning Project (Lab): https://github.com/rahmanziaur/TestServlet19
 Spring Boot Helps: https://youtu.be/-Fe0zk-F4OA
