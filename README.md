@@ -249,6 +249,172 @@ CookingTask task = new CookingTask("task");
 task.start();
 ```
 
+Yes. This is a good experiment because with **3 thread objects**, you can see exactly why `static` and non-static fields behave differently.
+
+```java
+public class ThreadMain {
+
+    public static void main(String[] args) {
+
+        CookingTask task1 = new CookingTask("Cooking");
+        CookingTask task2 = new CookingTask("Washing");
+        CookingTask task3 = new CookingTask("Cleaning");
+
+        task1.start();
+        task2.start();
+        task3.start();
+    }
+}
+
+
+class CookingTask extends Thread {
+
+    private String taskName;
+
+    // ONE copy shared by ALL CookingTask objects
+    static int staticCount = 0;
+
+    // ONE copy for EACH CookingTask object
+    int nonStaticCount = 0;
+
+
+    public CookingTask(String taskName) {
+        this.taskName = taskName;
+    }
+
+
+    @Override
+    public void run() {
+
+        long startTime = System.currentTimeMillis();
+
+        for (;;) {
+
+            // Increase both counters
+            staticCount++;
+            nonStaticCount++;
+
+            System.out.println(
+                    Thread.currentThread().getName()
+                    + " | " + taskName
+                    + " | Static Count = " + staticCount
+                    + " | Non-Static Count = " + nonStaticCount
+            );
+
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                break;
+            }
+
+            // Stop after approximately 10 seconds
+            if (System.currentTimeMillis() - startTime >= 10_000) {
+                break;
+            }
+        }
+
+        System.out.println(
+                taskName + " finished. "
+                + "Final Non-Static Count = " + nonStaticCount
+        );
+    }
+}
+```
+
+### What you should observe
+
+There are **3 objects**:
+
+```text
+task1
+task2
+task3
+```
+
+The non-static variable exists separately:
+
+```text
+task1 → nonStaticCount
+task2 → nonStaticCount
+task3 → nonStaticCount
+```
+
+But `staticCount` has only **one copy**:
+
+```text
+             ┌── task1
+             │
+staticCount ─┼── task2
+             │
+             └── task3
+             ↑
+       ONE shared variable
+```
+
+So after the first iteration, you might see something like:
+
+```text
+Thread-0 | Cooking  | Static Count = 1 | Non-Static Count = 1
+Thread-1 | Washing  | Static Count = 2 | Non-Static Count = 1
+Thread-2 | Cleaning | Static Count = 3 | Non-Static Count = 1
+
+Thread-0 | Cooking  | Static Count = 4 | Non-Static Count = 2
+Thread-1 | Washing  | Static Count = 5 | Non-Static Count = 2
+Thread-2 | Cleaning | Static Count = 6 | Non-Static Count = 2
+```
+
+The important observation is:
+
+**Static:**
+
+```text
+1 → 2 → 3 → 4 → 5 → 6 → ...
+```
+
+All three threads are modifying the **same variable**.
+
+**Non-static:**
+
+```text
+Cooking:  1 → 2 → 3 → 4 ...
+Washing:  1 → 2 → 3 → 4 ...
+Cleaning: 1 → 2 → 3 → 4 ...
+```
+
+Each object has its **own copy**.
+
+### One more interesting experiment
+
+At the end of `main()`, try:
+
+```java
+System.out.println(CookingTask.staticCount);
+```
+
+You can access the static variable using the **class name** because it belongs to the class:
+
+```java
+CookingTask.staticCount
+```
+
+But you cannot do:
+
+```java
+CookingTask.nonStaticCount;  // ERROR
+```
+
+because `nonStaticCount` belongs to an **object**, not the class.
+
+For example:
+
+```java
+System.out.println(task1.nonStaticCount);
+System.out.println(task2.nonStaticCount);
+System.out.println(task3.nonStaticCount);
+```
+
+will give three potentially different values.
+
 **Previous Year Recommended Topic:**
 
 Servlet Learning Project (Lab): https://github.com/rahmanziaur/TestServlet19
