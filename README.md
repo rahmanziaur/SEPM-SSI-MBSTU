@@ -845,6 +845,8 @@ So there are actually **two separate concurrency concepts** in this experiment:
 
 That distinction is very important when learning Java concurrency.
 
+# Java Thread Laboratory
+
 Yes. We can turn your current `CookingTask` example into a small **Java Thread laboratory** and progressively test the most important concepts: lifecycle, scheduling, priorities, interruption, `sleep()`, `join()`, synchronization, atomic variables, daemon threads, and thread coordination.
 
 ### Experiment roadmap
