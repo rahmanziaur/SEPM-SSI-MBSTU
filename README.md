@@ -1,5 +1,7 @@
 
-Lecture # 1: Static VS Non Static 
+**Lecture # 1: (27/09/2026)**
+
+**Part A: Static VS Non Static **
 
 If your goal is to **count how many objects have been created**, then the field `count` should normally be **`static`**, not non-static. The important point is that **static does not mean the value will not increase**. It means there is **one shared copy of the variable for the entire class**.
 
@@ -94,6 +96,158 @@ It does **not** actually count the total number of objects. It counts something 
 | `count++` across 3 objects       | 1 → 2 → 3          | Each object: 0 → 1 |
 | Suitable for total object count? | **Yes**            | No                 |
 
+
+**Part B:**
+
+Sure. Since you want to demonstrate **multiple threads**, an **infinite loop**, and then stop each thread after roughly **10 seconds**, I would structure it with a loop controlled by time rather than using a truly uncontrolled infinite loop.
+
+Also, because `CookingTask` extends `Thread`, you don't need to create another `Thread` around it. You can simply call `task.start()`.
+
+```java
+public class ThreadMain {
+    public static void main(String[] args) {
+
+        CookingTask task1 = new CookingTask("Cooking");
+        CookingTask task2 = new CookingTask("Washing");
+        CookingTask task3 = new CookingTask("Cleaning");
+
+        task1.start();
+        task2.start();
+        task3.start();
+
+        System.out.println("All tasks started...");
+    }
+}
+
+class CookingTask extends Thread {
+
+    private String taskName;
+
+    public CookingTask(String taskName) {
+        this.taskName = taskName;
+    }
+
+    @Override
+    public void run() {
+
+        long startTime = System.currentTimeMillis();
+
+        while (true) {
+
+            System.out.println(
+                    Thread.currentThread().getName()
+                    + " - Running: " + taskName
+            );
+
+            // Wait 1 second before next iteration
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                System.out.println(taskName + " interrupted.");
+                break;
+            }
+
+            // Stop after 10 seconds
+            if (System.currentTimeMillis() - startTime >= 10_000) {
+                break;
+            }
+        }
+
+        System.out.println(taskName + " finished.");
+    }
+}
+```
+
+### What happens
+
+You create **three separate thread objects**:
+
+```java
+CookingTask task1 = new CookingTask("Cooking");
+CookingTask task2 = new CookingTask("Washing");
+CookingTask task3 = new CookingTask("Cleaning");
+```
+
+Then:
+
+```java
+task1.start();
+task2.start();
+task3.start();
+```
+
+All three can execute concurrently.
+
+You'll see output similar to:
+
+```text
+All tasks started...
+
+Thread-0 - Running: Cooking
+Thread-1 - Running: Washing
+Thread-2 - Running: Cleaning
+
+Thread-0 - Running: Cooking
+Thread-1 - Running: Washing
+Thread-2 - Running: Cleaning
+
+Thread-0 - Running: Cooking
+Thread-2 - Running: Cleaning
+Thread-1 - Running: Washing
+
+...
+
+Cooking finished.
+Washing finished.
+Cleaning finished.
+```
+
+Notice that the order is **not guaranteed**. Sometimes `Thread-2` may print before `Thread-0`, etc. That's an important part of understanding Java multithreading.
+
+### If you specifically want an infinite `for` loop
+
+For teaching purposes, you can use:
+
+```java
+for (;;) {
+    System.out.println("Running " + taskName);
+
+    try {
+        Thread.sleep(1000);
+    } catch (InterruptedException e) {
+        break;
+    }
+
+    if (System.currentTimeMillis() - startTime >= 10_000) {
+        break;
+    }
+}
+```
+
+`for (;;)` is Java's traditional **infinite loop**:
+
+```java
+for (;;) {
+    // runs forever unless something breaks it
+}
+```
+
+The `break` after 10 seconds is what terminates it.
+
+**One more important correction to your original code:** you had:
+
+```java
+CookingTask task = new CookingTask("task");
+Thread thread = new Thread(task);
+thread.start();
+```
+
+Since `CookingTask extends Thread`, this creates a `Thread` **inside another Thread object**, which isn't what you want. Use:
+
+```java
+CookingTask task = new CookingTask("task");
+task.start();
+```
 
 **Previous Year Recommended Topic:**
 
