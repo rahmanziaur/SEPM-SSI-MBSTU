@@ -249,6 +249,8 @@ CookingTask task = new CookingTask("task");
 task.start();
 ```
 
+**Adding a static count and a non-static count to the above example to see the difference**
+
 Yes. This is a good experiment because with **3 thread objects**, you can see exactly why `static` and non-static fields behave differently.
 
 ```java
@@ -416,6 +418,8 @@ System.out.println(task3.nonStaticCount);
 will give three potentially different values.
 
 Absolutely. This is the key concept behind why your `staticCount++` experiment can produce surprising results.
+
+# Now see the concept of race condition, how to solve using synchornised and AtomicInteger
 
 ## 1. What is a race condition?
 
