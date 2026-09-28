@@ -845,6 +845,583 @@ So there are actually **two separate concurrency concepts** in this experiment:
 
 That distinction is very important when learning Java concurrency.
 
+Yes. We can turn your current `CookingTask` example into a small **Java Thread laboratory** and progressively test the most important concepts: lifecycle, scheduling, priorities, interruption, `sleep()`, `join()`, synchronization, atomic variables, daemon threads, and thread coordination.
+
+### Experiment roadmap
+
+| Experiment | Concept                   | What you'll observe              |
+| ---------- | ------------------------- | -------------------------------- |
+| 1          | `start()` vs `run()`      | New thread vs normal method call |
+| 2          | `sleep()`                 | Thread pauses without ending     |
+| 3          | `join()`                  | One thread waits for another     |
+| 4          | `getState()`              | Thread lifecycle                 |
+| 5          | `getName()` / `setName()` | Identifying threads              |
+| 6          | `isAlive()`               | Whether a thread is running      |
+| 7          | `interrupt()`             | Requesting a thread to stop/wake |
+| 8          | Thread priority           | Scheduling hint                  |
+| 9          | Race condition            | Shared data corruption           |
+| 10         | `synchronized`            | Protecting shared data           |
+| 11         | `AtomicInteger`           | Lock-free atomic counter         |
+| 12         | `volatile`                | Visibility between threads       |
+| 13         | Daemon thread             | Background thread behavior       |
+| 14         | `synchronized` block      | Fine-grained locking             |
+| 15         | `wait()` / `notify()`     | Thread coordination              |
+
+Let's start with **Experiments 1–7**, using your existing code.
+
+---
+
+# 1. `start()` vs `run()`
+
+This is one of the most important beginner concepts.
+
+### Test A — `start()`
+
+```java
+CookingTask task1 = new CookingTask("Cooking");
+CookingTask task2 = new CookingTask("Washing");
+
+task1.start();
+task2.start();
+```
+
+Both tasks execute concurrently.
+
+You may see:
+
+```text
+Cooking
+Washing
+Cooking
+Washing
+...
+```
+
+The exact order isn't guaranteed.
+
+### Test B — `run()`
+
+Change it to:
+
+```java
+task1.run();
+task2.run();
+```
+
+Now you are **not creating new threads**.
+
+It's essentially:
+
+```text
+main thread
+   |
+   +-- run Cooking
+   |
+   +-- run Washing
+```
+
+So `task2` won't start until `task1.run()` finishes.
+
+### Key lesson
+
+```java
+start();
+```
+
+means:
+
+> Create/start execution on a new thread.
+
+while:
+
+```java
+run();
+```
+
+means:
+
+> Just call this method normally.
+
+---
+
+# 2. Experiment with `sleep()`
+
+Your current code already uses:
+
+```java
+Thread.sleep(1000);
+```
+
+Try:
+
+```java
+Thread.sleep(3000);
+```
+
+Now each thread prints once every **3 seconds**.
+
+For example:
+
+```text
+Cooking
+Washing
+Cleaning
+
+--- 3 seconds ---
+
+Cooking
+Washing
+Cleaning
+```
+
+Important:
+
+`sleep()` does **not** stop the thread permanently.
+
+It puts the thread into a timed waiting state.
+
+---
+
+# 3. Experiment with `join()`
+
+Create three tasks:
+
+```java
+CookingTask task1 = new CookingTask("Cooking");
+CookingTask task2 = new CookingTask("Washing");
+CookingTask task3 = new CookingTask("Cleaning");
+
+task1.start();
+task2.start();
+task3.start();
+
+task1.join();
+task2.join();
+task3.join();
+
+System.out.println("All tasks completed!");
+```
+
+The main thread waits here:
+
+```java
+task1.join();
+```
+
+until `task1` finishes.
+
+Then:
+
+```java
+task2.join();
+```
+
+and so on.
+
+### Important distinction
+
+`join()` does **not** make the worker threads execute sequentially.
+
+This:
+
+```java
+task1.start();
+task2.start();
+task3.start();
+```
+
+still starts three threads.
+
+`join()` only tells the **main thread to wait**.
+
+---
+
+# 4. Experiment with thread state
+
+Add:
+
+```java
+System.out.println(task1.getState());
+```
+
+For example:
+
+```java
+CookingTask task1 = new CookingTask("Cooking");
+
+System.out.println("Before start: " + task1.getState());
+
+task1.start();
+
+System.out.println("After start: " + task1.getState());
+
+task1.join();
+
+System.out.println("After finish: " + task1.getState());
+```
+
+You may see:
+
+```text
+Before start: NEW
+After start: RUNNABLE
+After finish: TERMINATED
+```
+
+This demonstrates the thread lifecycle:
+
+```text
+NEW
+ ↓
+RUNNABLE
+ ↓
+RUNNING
+ ↓
+TERMINATED
+```
+
+Java's `Thread.State` has additional states such as:
+
+```text
+NEW
+RUNNABLE
+BLOCKED
+WAITING
+TIMED_WAITING
+TERMINATED
+```
+
+---
+
+# 5. Give threads names
+
+Instead of:
+
+```text
+Thread-0
+Thread-1
+Thread-2
+```
+
+give them meaningful names.
+
+You can do:
+
+```java
+task1.setName("Cooking-Thread");
+task2.setName("Washing-Thread");
+task3.setName("Cleaning-Thread");
+```
+
+Then:
+
+```java
+System.out.println(
+    Thread.currentThread().getName()
+);
+```
+
+Output:
+
+```text
+Cooking-Thread
+Washing-Thread
+Cleaning-Thread
+```
+
+This becomes extremely useful when debugging real multithreaded applications.
+
+---
+
+# 6. Experiment with `isAlive()`
+
+Try:
+
+```java
+CookingTask task1 = new CookingTask("Cooking");
+
+System.out.println(task1.isAlive());
+
+task1.start();
+
+System.out.println(task1.isAlive());
+
+task1.join();
+
+System.out.println(task1.isAlive());
+```
+
+Likely:
+
+```text
+false
+true
+false
+```
+
+Meaning:
+
+```text
+Before start
+    ↓
+not alive
+
+After start
+    ↓
+alive
+
+After termination
+    ↓
+not alive
+```
+
+---
+
+# 7. Experiment with `interrupt()`
+
+This is particularly useful.
+
+Create a task that keeps running:
+
+```java
+class CookingTask extends Thread {
+
+    private String taskName;
+
+    public CookingTask(String taskName) {
+        this.taskName = taskName;
+    }
+
+    @Override
+    public void run() {
+
+        for (;;) {
+
+            System.out.println(
+                    Thread.currentThread().getName()
+                    + " → " + taskName
+            );
+
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+
+                System.out.println(
+                        taskName + " was interrupted!"
+                );
+
+                break;
+            }
+        }
+
+        System.out.println(taskName + " finished.");
+    }
+}
+```
+
+Then in `main()`:
+
+```java
+CookingTask task1 = new CookingTask("Cooking");
+
+task1.start();
+
+Thread.sleep(5000);
+
+task1.interrupt();
+```
+
+The sequence is:
+
+```text
+Cooking
+Cooking
+Cooking
+Cooking
+Cooking
+
+        ↓
+
+main()
+   |
+   | interrupt()
+   ↓
+
+Cooking was interrupted!
+Cooking finished.
+```
+
+### Important concept
+
+Many beginners think:
+
+```java
+task1.interrupt();
+```
+
+means:
+
+> Kill the thread.
+
+It doesn't.
+
+It **requests interruption**.
+
+The thread must respond appropriately.
+
+In our example, `sleep()` throws:
+
+```java
+InterruptedException
+```
+
+and we respond with:
+
+```java
+break;
+```
+
+which actually ends the loop.
+
+---
+
+# 8. Now combine everything
+
+Here's a useful version of your experiment:
+
+```java
+public class ThreadMain {
+
+    public static void main(String[] args)
+            throws InterruptedException {
+
+        CookingTask task1 = new CookingTask("Cooking");
+        CookingTask task2 = new CookingTask("Washing");
+        CookingTask task3 = new CookingTask("Cleaning");
+
+        task1.setName("Thread-Cooking");
+        task2.setName("Thread-Washing");
+        task3.setName("Thread-Cleaning");
+
+        System.out.println("Task 1: " + task1.getState());
+
+        task1.start();
+        task2.start();
+        task3.start();
+
+        System.out.println("Task 1: " + task1.getState());
+
+        // Let them run for 5 seconds
+        Thread.sleep(5000);
+
+        System.out.println("Interrupting threads...");
+
+        task1.interrupt();
+        task2.interrupt();
+        task3.interrupt();
+
+        // Wait for all threads
+        task1.join();
+        task2.join();
+        task3.join();
+
+        System.out.println("All threads finished.");
+
+        System.out.println(
+                "Task 1 state: " + task1.getState()
+        );
+
+        System.out.println(
+                "Task 1 alive: " + task1.isAlive()
+        );
+    }
+}
+
+
+class CookingTask extends Thread {
+
+    private String taskName;
+
+    public CookingTask(String taskName) {
+        this.taskName = taskName;
+    }
+
+    @Override
+    public void run() {
+
+        for (;;) {
+
+            System.out.println(
+                    Thread.currentThread().getName()
+                    + " → Running " + taskName
+            );
+
+            try {
+                Thread.sleep(1000);
+            }
+            catch (InterruptedException e) {
+
+                System.out.println(
+                        taskName + " received interrupt."
+                );
+
+                break;
+            }
+        }
+
+        System.out.println(
+                taskName + " terminated."
+        );
+    }
+}
+```
+
+This one program demonstrates:
+
+```text
+             Java Thread
+                 │
+       ┌─────────┼─────────┐
+       ↓         ↓         ↓
+     start()   sleep()   interrupt()
+       │         │         │
+       ↓         ↓         ↓
+    NEW →     TIMED →   interruption
+   RUNNABLE   WAITING      request
+       │
+       ↓
+   TERMINATED
+       ↑
+      join()
+       ↑
+   main waits
+```
+
+## The next important experiment: `volatile`
+
+After this, I'd recommend testing **`volatile` vs a normal variable**, because it introduces another fundamental concurrency problem: **visibility**.
+
+For example, two threads can share:
+
+```java
+boolean running = true;
+```
+
+One thread changes:
+
+```java
+running = false;
+```
+
+but another thread may not immediately observe that change because of **thread visibility/caching**.
+
+Changing it to:
+
+```java
+volatile boolean running = true;
+```
+
+gives you a very interesting experiment showing the difference between **atomicity** (your `staticCount++` problem) and **visibility** (`volatile` problem).
 
 **Previous Year Recommended Topics:**
 
