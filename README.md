@@ -1425,7 +1425,9 @@ volatile boolean running = true;
 
 gives you a very interesting experiment showing the difference between **atomicity** (your `staticCount++` problem) and **visibility** (`volatile` problem).
 
-See here for more: https://github.com/rahmanziaur/java-thread
+See here for more: 
+- https://rahmanziaur.github.io/java-thread/
+- https://github.com/rahmanziaur/java-thread
   
 **Previous Year Recommended Topics:**
 
